@@ -40,3 +40,6 @@ yarn-error.log*
 data.json
 gamification.json
 progress.json
+notes.json
+quests.json
+inde.tsx

@@ -24,7 +24,7 @@
       "title": "Focused Learner",
       "description": "Study for 30 minutes",
       "target": 30,
-      "progress": 8,
+      "progress": 10,
       "reward": 50,
       "completed": false
     }
