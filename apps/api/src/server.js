@@ -140,6 +140,84 @@ function saveGamification(gamificationData) {
   fs.writeFileSync(GAMIFICATION_FILE, JSON.stringify(gamificationData, null, 2));
 }
 
+// Read notes data
+function readNotes() {
+  if (!fs.existsSync(NOTES_FILE)) return {};
+  return JSON.parse(fs.readFileSync(NOTES_FILE, "utf8"));
+}
+
+// Save notes data
+function saveNotes(notesData) {
+  fs.writeFileSync(NOTES_FILE, JSON.stringify(notesData, null, 2));
+}
+
+// Read quizzes data
+function readQuizzes() {
+  if (!fs.existsSync(QUIZZES_FILE)) return {};
+  return JSON.parse(fs.readFileSync(QUIZZES_FILE, "utf8"));
+}
+
+// Save quizzes data
+function saveQuizzes(quizzesData) {
+  fs.writeFileSync(QUIZZES_FILE, JSON.stringify(quizzesData, null, 2));
+}
+
+// Read analytics data
+function readAnalytics() {
+  if (!fs.existsSync(ANALYTICS_FILE)) {
+    return {
+      totalWatchTime: 0,
+      dailyStats: {},
+      courseStats: {}
+    };
+  }
+  return JSON.parse(fs.readFileSync(ANALYTICS_FILE, "utf8"));
+}
+
+// Save analytics data
+function saveAnalytics(analyticsData) {
+  fs.writeFileSync(ANALYTICS_FILE, JSON.stringify(analyticsData, null, 2));
+}
+
+// Read quests data
+function readQuests() {
+  if (!fs.existsSync(QUESTS_FILE)) {
+    const today = new Date().toDateString();
+    return {
+      lastReset: today,
+      dailyQuests: [
+        { id: "watch-1", title: "Getting Started", description: "Watch 1 video today", target: 1, progress: 0, reward: 25, completed: false },
+        { id: "watch-3", title: "On a Roll", description: "Watch 3 videos today", target: 3, progress: 0, reward: 75, completed: false },
+        { id: "study-30", title: "Focused Learner", description: "Study for 30 minutes", target: 30, progress: 0, reward: 50, completed: false }
+      ]
+    };
+  }
+  return JSON.parse(fs.readFileSync(QUESTS_FILE, "utf8"));
+}
+
+// Save quests data
+function saveQuests(questsData) {
+  fs.writeFileSync(QUESTS_FILE, JSON.stringify(questsData, null, 2));
+}
+
+// Reset daily quests if it's a new day
+function checkAndResetQuests() {
+  const quests = readQuests();
+  const today = new Date().toDateString();
+  
+  if (quests.lastReset !== today) {
+    quests.lastReset = today;
+    quests.dailyQuests = quests.dailyQuests.map(quest => ({
+      ...quest,
+      progress: 0,
+      completed: false
+    }));
+    saveQuests(quests);
+  }
+  
+  return quests;
+}
+
 // Generate on startup
 let courseData = generateCourseData();
 
@@ -255,6 +333,288 @@ app.post("/api/gamification/reset", (req, res) => {
   res.json({ success: true, message: "Gamification data reset successfully" });
 });
 
+// ========== NOTES APIs ==========
+
+// API: Get notes for a video
+app.get("/api/notes/:videoId", (req, res) => {
+  const notes = readNotes();
+  const videoId = req.params.videoId;
+  res.json(notes[videoId] || []);
+});
+
+// API: Save note for a video
+app.post("/api/notes/:videoId", (req, res) => {
+  const videoId = req.params.videoId;
+  const { timestamp, content } = req.body;
+  
+  const notes = readNotes();
+  if (!notes[videoId]) {
+    notes[videoId] = [];
+  }
+  
+  const newNote = {
+    id: Date.now(),
+    timestamp: parseFloat(timestamp),
+    content,
+    createdAt: new Date().toISOString()
+  };
+  
+  notes[videoId].push(newNote);
+  saveNotes(notes);
+  res.json({ success: true, note: newNote });
+});
+
+// API: Delete note
+app.delete("/api/notes/:videoId/:noteId", (req, res) => {
+  const { videoId, noteId } = req.params;
+  const notes = readNotes();
+  
+  if (notes[videoId]) {
+    notes[videoId] = notes[videoId].filter(note => note.id !== parseInt(noteId));
+    saveNotes(notes);
+  }
+  
+  res.json({ success: true });
+});
+
+// ========== QUIZZES APIs ==========
+
+// API: Get quiz for a video
+app.get("/api/quiz/:videoId", (req, res) => {
+  const quizzes = readQuizzes();
+  const videoId = req.params.videoId;
+  res.json(quizzes[videoId] || null);
+});
+
+// API: Submit quiz answer
+app.post("/api/quiz/:videoId/submit", (req, res) => {
+  const videoId = req.params.videoId;
+  const { answers } = req.body;
+  
+  const quizzes = readQuizzes();
+  const quiz = quizzes[videoId];
+  
+  if (!quiz) {
+    return res.status(404).json({ error: "Quiz not found" });
+  }
+  
+  let correctCount = 0;
+  quiz.questions.forEach((question, index) => {
+    if (answers[index] === question.correctAnswer) {
+      correctCount++;
+    }
+  });
+  
+  const score = Math.round((correctCount / quiz.questions.length) * 100);
+  const xpEarned = Math.round(score / 10) * 5;
+  
+  res.json({
+    success: true,
+    score,
+    correctCount,
+    totalQuestions: quiz.questions.length,
+    xpEarned
+  });
+});
+
+// ========== ANALYTICS APIs ==========
+
+// API: Get analytics
+app.get("/api/analytics", (req, res) => {
+  const analytics = readAnalytics();
+  res.json(analytics);
+});
+
+// API: Track watch time
+app.post("/api/analytics/watch-time", (req, res) => {
+  const { duration, videoId, courseId } = req.body;
+  const analytics = readAnalytics();
+  
+  analytics.totalWatchTime += duration;
+  
+  const today = new Date().toDateString();
+  if (!analytics.dailyStats[today]) {
+    analytics.dailyStats[today] = { watchTime: 0, videosCompleted: 0 };
+  }
+  analytics.dailyStats[today].watchTime += duration;
+  
+  if (!analytics.courseStats[courseId]) {
+    analytics.courseStats[courseId] = { watchTime: 0, videosCompleted: 0 };
+  }
+  analytics.courseStats[courseId].watchTime += duration;
+  
+  saveAnalytics(analytics);
+  res.json({ success: true });
+});
+
+// ========== QUESTS APIs ==========
+
+// API: Get daily quests
+app.get("/api/quests", (req, res) => {
+  const quests = checkAndResetQuests();
+  res.json(quests);
+});
+
+// API: Update quest progress
+app.post("/api/quests/progress", (req, res) => {
+  const { questId, increment } = req.body;
+  const quests = checkAndResetQuests();
+  
+  const quest = quests.dailyQuests.find(q => q.id === questId);
+  if (quest && !quest.completed) {
+    quest.progress = Math.min(quest.progress + (increment || 1), quest.target);
+    
+    if (quest.progress >= quest.target) {
+      quest.completed = true;
+    }
+    
+    saveQuests(quests);
+  }
+  
+  res.json({ success: true, quests });
+});
+
+// ========== NOTES APIs ==========
+
+// API: Get notes for a video
+app.get("/api/notes/:videoId", (req, res) => {
+  const notes = readNotes();
+  const videoId = req.params.videoId;
+  res.json(notes[videoId] || []);
+});
+
+// API: Save note for a video
+app.post("/api/notes/:videoId", (req, res) => {
+  const videoId = req.params.videoId;
+  const { timestamp, content } = req.body;
+  
+  const notes = readNotes();
+  if (!notes[videoId]) {
+    notes[videoId] = [];
+  }
+  
+  const newNote = {
+    id: Date.now(),
+    timestamp: parseFloat(timestamp),
+    content,
+    createdAt: new Date().toISOString()
+  };
+  
+  notes[videoId].push(newNote);
+  saveNotes(notes);
+  res.json({ success: true, note: newNote });
+});
+
+// API: Delete note
+app.delete("/api/notes/:videoId/:noteId", (req, res) => {
+  const { videoId, noteId } = req.params;
+  const notes = readNotes();
+  
+  if (notes[videoId]) {
+    notes[videoId] = notes[videoId].filter(note => note.id !== parseInt(noteId));
+    saveNotes(notes);
+  }
+  
+  res.json({ success: true });
+});
+
+// ========== QUIZZES APIs ==========
+
+// API: Get quiz for a video
+app.get("/api/quiz/:videoId", (req, res) => {
+  const quizzes = readQuizzes();
+  const videoId = req.params.videoId;
+  res.json(quizzes[videoId] || null);
+});
+
+// API: Submit quiz answer
+app.post("/api/quiz/:videoId/submit", (req, res) => {
+  const videoId = req.params.videoId;
+  const { answers } = req.body;
+  
+  const quizzes = readQuizzes();
+  const quiz = quizzes[videoId];
+  
+  if (!quiz) {
+    return res.status(404).json({ error: "Quiz not found" });
+  }
+  
+  let correctCount = 0;
+  quiz.questions.forEach((question, index) => {
+    if (answers[index] === question.correctAnswer) {
+      correctCount++;
+    }
+  });
+  
+  const score = Math.round((correctCount / quiz.questions.length) * 100);
+  const xpEarned = Math.round(score / 10) * 5; // 5 XP per 10% score
+  
+  res.json({
+    success: true,
+    score,
+    correctCount,
+    totalQuestions: quiz.questions.length,
+    xpEarned
+  });
+});
+
+// ========== ANALYTICS APIs ==========
+
+// API: Get analytics
+app.get("/api/analytics", (req, res) => {
+  const analytics = readAnalytics();
+  res.json(analytics);
+});
+
+// API: Track watch time
+app.post("/api/analytics/watch-time", (req, res) => {
+  const { duration, videoId, courseId } = req.body;
+  const analytics = readAnalytics();
+  
+  analytics.totalWatchTime += duration;
+  
+  const today = new Date().toDateString();
+  if (!analytics.dailyStats[today]) {
+    analytics.dailyStats[today] = { watchTime: 0, videosCompleted: 0 };
+  }
+  analytics.dailyStats[today].watchTime += duration;
+  
+  if (!analytics.courseStats[courseId]) {
+    analytics.courseStats[courseId] = { watchTime: 0, videosCompleted: 0 };
+  }
+  analytics.courseStats[courseId].watchTime += duration;
+  
+  saveAnalytics(analytics);
+  res.json({ success: true });
+});
+
+// ========== QUESTS APIs ==========
+
+// API: Get daily quests
+app.get("/api/quests", (req, res) => {
+  const quests = checkAndResetQuests();
+  res.json(quests);
+});
+
+// API: Update quest progress
+app.post("/api/quests/progress", (req, res) => {
+  const { questId, increment } = req.body;
+  const quests = checkAndResetQuests();
+  
+  const quest = quests.dailyQuests.find(q => q.id === questId);
+  if (quest && !quest.completed) {
+    quest.progress = Math.min(quest.progress + (increment || 1), quest.target);
+    
+    if (quest.progress >= quest.target) {
+      quest.completed = true;
+    }
+    
+    saveQuests(quests);
+  }
+  
+  res.json({ success: true, quests });
+});
+
 // ========== STREAMING APIs ==========
 
 // API: Stream video
@@ -322,4 +682,10 @@ app.listen(process.env.PORT || 4000, () => {
   console.log(`🚀 LMS API running at http://localhost:${process.env.PORT || 4000}`);
   console.log(`📚 Monitoring ${COURSE_PATHS.length} course path(s)`);
   console.log(`🎮 Gamification system active`);
+  console.log(`📝 Notes & Quizzes enabled`);
+  console.log(`📊 Analytics tracking enabled`);
+  console.log(`🎯 Daily quests active`);
+  
+  // Initialize daily quests
+  checkAndResetQuests();
 });

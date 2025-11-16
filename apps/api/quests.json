@@ -1,0 +1,32 @@
+{
+  "lastReset": "Sun Nov 16 2025",
+  "dailyQuests": [
+    {
+      "id": "watch-1",
+      "title": "Getting Started",
+      "description": "Watch 1 video today",
+      "target": 1,
+      "progress": 0,
+      "reward": 25,
+      "completed": false
+    },
+    {
+      "id": "watch-3",
+      "title": "On a Roll",
+      "description": "Watch 3 videos today",
+      "target": 3,
+      "progress": 0,
+      "reward": 75,
+      "completed": false
+    },
+    {
+      "id": "study-30",
+      "title": "Focused Learner",
+      "description": "Study for 30 minutes",
+      "target": 30,
+      "progress": 8,
+      "reward": 50,
+      "completed": false
+    }
+  ]
+}
